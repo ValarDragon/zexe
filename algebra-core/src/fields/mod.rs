@@ -283,14 +283,16 @@ impl LegendreSymbol {
 #[derive(Debug)]
 pub struct BitIterator<E> {
     t: E,
-    n: usize,
+    front: usize,
+    back: usize,
 }
 
 impl<E: AsRef<[u64]>> BitIterator<E> {
     pub fn new(t: E) -> Self {
-        let n = t.as_ref().len() * 64;
+        let front = t.as_ref().len() * 64;
+        let back = 0;
 
-        BitIterator { t, n }
+        BitIterator { t, front, back }
     }
 }
 
@@ -298,12 +300,26 @@ impl<E: AsRef<[u64]>> Iterator for BitIterator<E> {
     type Item = bool;
 
     fn next(&mut self) -> Option<bool> {
-        if self.n == 0 {
+        if self.front == self.back {
             None
         } else {
-            self.n -= 1;
-            let part = self.n / 64;
-            let bit = self.n - (64 * part);
+            self.front -= 1;
+            let part = self.front / 64;
+            let bit = self.front - (64 * part);
+
+            Some(self.t.as_ref()[part] & (1 << bit) > 0)
+        }
+    }
+}
+
+impl<E: AsRef<[u64]>> DoubleEndedIterator for BitIterator<E> {
+    fn next_back(&mut self) -> Option<bool> {
+        if self.back == self.front {
+            None
+        } else {
+            let part = self.back / 64;
+            let bit = self.back - (64 * part);
+            self.back += 1;
 
             Some(self.t.as_ref()[part] & (1 << bit) > 0)
         }
