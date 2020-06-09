@@ -13,6 +13,7 @@ enum NamedObject {
 pub struct TestConstraintSystem<ConstraintF: Field> {
     named_objects: BTreeMap<String, NamedObject>,
     current_namespace: Vec<String>,
+    current_namespace_name: String,
     pub constraints: Vec<(
         LinearCombination<ConstraintF>,
         LinearCombination<ConstraintF>,
@@ -56,6 +57,7 @@ impl<ConstraintF: Field> TestConstraintSystem<ConstraintF> {
         TestConstraintSystem {
             named_objects: map,
             current_namespace: vec![],
+            current_namespace_name: "".to_string(),
             constraints: vec![],
             inputs: vec![(ConstraintF::one(), "ONE".into())],
             aux: vec![],
@@ -130,15 +132,16 @@ impl<ConstraintF: Field> TestConstraintSystem<ConstraintF> {
     }
 }
 
-fn compute_path(ns: &[String], this: String) -> String {
-    if this.chars().any(|a| a == '/') {
-        panic!("'/' is not allowed in names");
-    }
+// Concatenates "/" + new_name to the cached namespace prefix
+fn compute_path(ns: String, this: String) -> String {
+    ns + "/" + &this
+}
 
+fn compute_path_from_namespace_components(ns: &[String]) -> String {
     let mut name = String::new();
 
     let mut needs_separation = false;
-    for ns in ns.iter().chain(Some(&this).into_iter()) {
+    for ns in ns.iter() {
         if needs_separation {
             name += "/";
         }
@@ -160,7 +163,7 @@ impl<ConstraintF: Field> ConstraintSystem<ConstraintF> for TestConstraintSystem<
         AR: Into<String>,
     {
         let index = self.aux.len();
-        let path = compute_path(&self.current_namespace, annotation().into());
+        let path = compute_path(self.current_namespace_name.clone(), annotation().into());
         self.aux.push((f()?, path.clone()));
         let var = Variable::new_unchecked(Index::Aux(index));
         self.set_named_obj(path, NamedObject::Var(var));
@@ -175,7 +178,7 @@ impl<ConstraintF: Field> ConstraintSystem<ConstraintF> for TestConstraintSystem<
         AR: Into<String>,
     {
         let index = self.inputs.len();
-        let path = compute_path(&self.current_namespace, annotation().into());
+        let path = compute_path(self.current_namespace_name.clone(), annotation().into());
         self.inputs.push((f()?, path.clone()));
         let var = Variable::new_unchecked(Index::Input(index));
         self.set_named_obj(path, NamedObject::Var(var));
@@ -191,7 +194,7 @@ impl<ConstraintF: Field> ConstraintSystem<ConstraintF> for TestConstraintSystem<
         LB: FnOnce(LinearCombination<ConstraintF>) -> LinearCombination<ConstraintF>,
         LC: FnOnce(LinearCombination<ConstraintF>) -> LinearCombination<ConstraintF>,
     {
-        let path = compute_path(&self.current_namespace, annotation().into());
+        let path = compute_path(self.current_namespace_name.clone(), annotation().into());
         let index = self.constraints.len();
         self.set_named_obj(path.clone(), NamedObject::Constraint(index));
 
@@ -211,13 +214,15 @@ impl<ConstraintF: Field> ConstraintSystem<ConstraintF> for TestConstraintSystem<
         N: FnOnce() -> NR,
     {
         let name = name_fn().into();
-        let path = compute_path(&self.current_namespace, name.clone());
-        self.set_named_obj(path, NamedObject::Namespace);
+        let path = compute_path(self.current_namespace_name.clone(), name.clone());
+        self.set_named_obj(path.clone(), NamedObject::Namespace);
         self.current_namespace.push(name);
+        self.current_namespace_name = path;
     }
 
     fn pop_namespace(&mut self) {
         assert!(self.current_namespace.pop().is_some());
+        self.current_namespace_name = compute_path_from_namespace_components(&self.current_namespace);
     }
 
     fn get_root(&mut self) -> &mut Self::Root {
