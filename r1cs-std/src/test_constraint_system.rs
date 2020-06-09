@@ -134,6 +134,10 @@ impl<ConstraintF: Field> TestConstraintSystem<ConstraintF> {
 
 // Concatenates "/" + new_name to the cached namespace prefix
 fn compute_path(ns: String, this: String) -> String {
+    if this.chars().any(|a| a == '/') {
+        panic!("'/' is not allowed in names");
+    }
+    
     ns + "/" + &this
 }
 
